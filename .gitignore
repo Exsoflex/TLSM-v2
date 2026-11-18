@@ -1,0 +1,34 @@
+# Entorno virtual (nunca versionar)
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+
+# Editores / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+
+# Logs y artefactos
+*.log
+logs/
+build/
+dist/
+*.tmp
+
+# Salidas locales de captura (los datasets definitivos se versionan aparte)
+data/raw/
+data/tmp/
+capturas/
