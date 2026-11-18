@@ -28,7 +28,19 @@ build/
 dist/
 *.tmp
 
-# Salidas locales de captura (los datasets definitivos se versionan aparte)
-data/raw/
+# Datos y modelos generados (solo se versionan los .gitkeep y legacy/v1)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 data/tmp/
 capturas/
+models/*
+!models/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# Empaquetado
+*.egg-info/
+licenses/
+

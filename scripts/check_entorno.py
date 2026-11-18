@@ -81,7 +81,9 @@ def revisar_camaras(cv2_mod: object | None, maximo: int = 4) -> None:
         captura = None
         try:
             backend = cv2_mod.CAP_DSHOW if sys.platform.startswith("win") else 0
-            captura = cv2_mod.VideoCapture(indice, backend) if backend else cv2_mod.VideoCapture(indice)
+            captura = (
+                cv2_mod.VideoCapture(indice, backend) if backend else cv2_mod.VideoCapture(indice)
+            )
             if not captura.isOpened():
                 continue
             ok, frame = captura.read()
