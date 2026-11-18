@@ -324,6 +324,27 @@ def resumen_etiquetas(y: np.ndarray) -> dict[str, int]:
     return {str(e): int(c) for e, c in zip(etiquetas, conteos, strict=True)}
 
 
+def contar_sesion(directorio: Path | str) -> dict[str, int]:
+    """Cuenta muestras estáticas y secuencias dinámicas guardadas por etiqueta.
+
+    Sirve para retomar una sesión de captura: muestra qué letras ya tienen datos.
+    """
+    directorio = Path(directorio)
+    if not directorio.is_dir():
+        return {}
+
+    conteos: dict[str, int] = {}
+    for archivo in sorted(directorio.glob("static_*.npz")):
+        etiqueta = archivo.stem[len("static_") :]
+        with np.load(archivo, allow_pickle=False) as datos:
+            conteos[etiqueta] = conteos.get(etiqueta, 0) + len(datos["y"])
+    for archivo in sorted(directorio.glob("dynamic_*.npz")):
+        etiqueta = archivo.stem[len("dynamic_") :]
+        with np.load(archivo, allow_pickle=False) as datos:
+            conteos[etiqueta] = conteos.get(etiqueta, 0) + len(datos["y"])
+    return conteos
+
+
 def hash_archivo(archivo: Path | str, bloques: int = 1 << 20) -> str:
     h = hashlib.sha256()
     with open(archivo, "rb") as f:
@@ -339,6 +360,7 @@ __all__ = [
     "cargar_procesado",
     "combinar_dinamicos",
     "combinar_estaticos",
+    "contar_sesion",
     "guardar_dinamico",
     "guardar_estatico",
     "guardar_procesado",

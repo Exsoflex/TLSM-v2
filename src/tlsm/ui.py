@@ -21,7 +21,8 @@ from .config import (
     ConfigCamara,
     display_ascii,
 )
-from .landmarks import CONEXIONES_MANOS, FrameLandmarks, FuenteManos
+from .drawing import FUENTE, dibujar_mano, envolver_texto
+from .landmarks import FuenteManos
 from .model_io import cargar_modelo
 from .recognize import Evento, Reconocedor
 from .text import CompositorTexto
@@ -34,57 +35,6 @@ VERDE = (80, 220, 120)
 AMARILLO = (60, 210, 240)
 ROJO = (80, 80, 230)
 AZUL = (230, 170, 60)
-
-FUENTE = cv2.FONT_HERSHEY_SIMPLEX
-
-
-# ---------------------------------------------------------------------------
-# Dibujo
-# ---------------------------------------------------------------------------
-
-
-def _envolver(texto: str, ancho: int, escala: float = 0.75, grosor: int = 2) -> list[str]:
-    def cabe(cadena: str) -> bool:
-        return cv2.getTextSize(cadena, FUENTE, escala, grosor)[0][0] <= ancho
-
-    if not texto:
-        return [""]
-
-    lineas: list[str] = []
-    actual = ""
-    for palabra in texto.split(" "):
-        prueba = f"{actual} {palabra}" if actual else palabra
-        if cabe(prueba):
-            actual = prueba
-            continue
-        if actual:
-            lineas.append(actual)
-        resto = palabra
-        while not cabe(resto):
-            corte = len(resto)
-            while corte > 1 and not cabe(resto[:corte]):
-                corte -= 1
-            lineas.append(resto[:corte])
-            resto = resto[corte:]
-        actual = resto
-    if actual or not lineas:
-        lineas.append(actual)
-    return lineas
-
-
-def _dibujar_mano(
-    frame: np.ndarray, deteccion: FrameLandmarks, color: tuple[int, int, int]
-) -> None:
-    alto, ancho = frame.shape[:2]
-    puntos = [
-        (int(np.clip(x, 0.0, 1.0) * ancho), int(np.clip(y, 0.0, 1.0) * alto))
-        for x, y, _ in deteccion.puntos
-    ]
-    for a, b in CONEXIONES_MANOS:
-        cv2.line(frame, puntos[a], puntos[b], color, 2, cv2.LINE_AA)
-    for x, y in puntos:
-        cv2.circle(frame, (x, y), 4, (255, 255, 255), -1, cv2.LINE_AA)
-        cv2.circle(frame, (x, y), 4, color, 1, cv2.LINE_AA)
 
 
 def _dibujar_panel(
@@ -115,7 +65,7 @@ def _dibujar_panel(
 
     # Texto reconocido
     cv2.putText(panel, "TEXTO", (18, 112), FUENTE, 0.55, TEXTO_SUAVE, 1, cv2.LINE_AA)
-    lineas = _envolver(texto, ancho - 40, escala=0.78, grosor=2)
+    lineas = envolver_texto(texto, ancho - 40, escala=0.78, grosor=2)
     for i, linea in enumerate(lineas[-4:]):
         cv2.putText(
             panel,
@@ -261,7 +211,7 @@ def ejecutar(args: argparse.Namespace) -> int:
 
                 if deteccion is not None and mostrar_puntos:
                     color = AZUL if deteccion.mano == "Left" else VERDE
-                    _dibujar_mano(frame, deteccion, color)
+                    dibujar_mano(frame, deteccion.puntos, color)
 
                 for evento in reconocedor.actualizar(deteccion):
                     if compositor.agregar_evento(evento.etiqueta):

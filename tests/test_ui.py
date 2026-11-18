@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from tlsm.ui import _dibujar_panel, _envolver
+from tlsm.drawing import envolver_texto
+from tlsm.ui import _dibujar_panel
 
 
 def test_panel_se_dibuja_sin_errores():
@@ -24,6 +25,6 @@ def test_panel_vacio():
 
 
 def test_envolver_texto_largo():
-    lineas = _envolver("A" * 200, 300)
+    lineas = envolver_texto("A" * 200, 300)
     assert len(lineas) > 1
     assert all(linea for linea in lineas)

@@ -2,6 +2,8 @@
 
 Aplicación de escritorio para reconocer **Lengua de Señas Mexicana (LSM)** con la cámara.
 
+Repositorio: **https://github.com/Exsoflex/TLSM-v2**
+
 - **Ahora:** letras del abecedario (dactilología), estáticas y con movimiento.
 - **Después:** palabras, frases y traducción bidireccional:
   - señas → texto → voz
@@ -80,16 +82,18 @@ Para desarrollo:
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
 
-# 6. Capturar datos nuevos
+# 6. Captura guiada de datos (interfaz recomendada)
+.\.venv\Scripts\python.exe scripts\capturar_ui.py
+
+# Alternativa: una sola letra desde la terminal
 .\.venv\Scripts\python.exe scripts\capturar.py --letra A --firmante S01
-.\.venv\Scripts\python.exe scripts\capturar.py --letra J --firmante S01
 
 # 7. Consolidar sesiones capturadas y reentrenar
 .\.venv\Scripts\python.exe scripts\consolidar.py
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
 ```
 
-### Teclas de la app
+### Teclas de la app de reconocimiento
 
 | Tecla | Acción |
 |---|---|
@@ -99,6 +103,76 @@ Para desarrollo:
 | `V` | hablar el texto (TTS) |
 | `L` | mostrar/ocultar landmarks |
 | `Q` / `ESC` | salir |
+
+## Captura guiada de datos
+
+`scripts/capturar_ui.py` es la forma recomendada de grabar el abecedario. Muestra las 27
+letras con su progreso, la descripción oficial de cada seña y guarda sola cada ronda; no
+hay que escribir un comando por letra.
+
+```powershell
+# Empezar una sesión nueva (pregunta firmante y sesión)
+.\.venv\Scripts\python.exe scripts\capturar_ui.py
+
+# Todo explícito, con 3 rondas por letra
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-18_01
+
+# Solo algunas letras o solo las que faltan
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --letras A,B,C,J --rondas 3
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --solo-faltantes
+```
+
+**Cómo se usa**
+
+1. Escribe el identificador del firmante (`S01`) y el nombre de la sesión
+   (`2026-11-18_01`). Si repites la misma sesión, la app **retoma el progreso**.
+2. Elige la letra con las flechas (o `A`/`D`/`W`/`S`) y pulsa `ESPACIO`.
+3. **Letras estáticas** (A, B, C, …): mantén la seña quieta; la app descarta los frames con
+   movimiento y guarda 100 muestras por ronda.
+4. **Letras dinámicas** (`*` en la cuadrícula: J, K, Ñ, Q, X, Z): tras la cuenta regresiva,
+   haz el movimiento; se guardan 20 frames por secuencia, 10 secuencias por ronda.
+5. Al terminar las 3 rondas, la letra queda en verde y la app **salta sola a la siguiente
+   pendiente**. `TAB` también salta a la siguiente pendiente.
+
+| Tecla | Acción |
+|---|---|
+| `ESPACIO` | iniciar o continuar una ronda |
+| `TAB` | ir a la siguiente letra pendiente |
+| Flechas / `A` `D` `W` `S` | moverse por la cuadrícula de letras |
+| `R` | descartar la ronda en curso |
+| `H` | mostrar/ocultar la ayuda |
+| `Q` / `ESC` | salir (lo ya guardado se conserva) |
+
+**Consejos para datos útiles**
+
+- Buena luz frontal, fondo limpio y la mano completa dentro del cuadro.
+- Graba varias sesiones y, si puedes, **varios firmantes**; un solo firmante hace que el
+  modelo memorice a la persona.
+- No mezcles la seña de una letra con otra: si dudas, descarta con `R` y repite.
+- Los datos quedan en `data/raw/<sesion>/static_<LETRA>.npz` y `dynamic_<LETRA>.npz`.
+
+**Opciones principales**
+
+| Opción | Por defecto | Para qué |
+|---|---|---|
+| `--firmante` | pregunta / `S01` | identifica a la persona |
+| `--sesion` | fecha y hora | agrupa y permite retomar |
+| `--letras` | todas | lista separada por comas (`A,B,J`) |
+| `--rondas` | `3` | rondas por letra |
+| `--muestras-ronda` | `100` | muestras por ronda estática |
+| `--secuencias-ronda` | `10` | secuencias por ronda dinámica |
+| `--solo-faltantes` | desactivado | empieza en la primera letra pendiente |
+| `--sin-auto-avance` | desactivado | no cambia de letra al completarla |
+| `--camara` | `0` | índice de cámara |
+| `--sin-espejo` | desactivado | desactiva el espejo de la imagen |
+
+Al terminar, consolida y reentrena:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\consolidar.py
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
+```
 
 ## Estructura
 
@@ -112,7 +186,7 @@ TLSM/
 ├─ legacy/                 # código y datos de la v1, solo referencia
 ├─ models/                 # modelos entrenados (no se versionan)
 ├─ reports/                # métricas y matrices de confusión (no se versionan)
-├─ scripts/                # interfaz de línea de comandos
+├─ scripts/                # interfaz de línea de comandos y apps
 ├─ src/tlsm/               # núcleo reutilizable (sin cámara ni ventana)
 ├─ tests/                  # pytest
 ├─ GUIA_PROYECTO.md        # memoria y decisiones del proyecto
@@ -129,6 +203,8 @@ TLSM/
 | `camera.py` | cámara de escritorio (OpenCV) |
 | `datasets.py` | esquema v2 `.npz`, metadatos e importación de la v1 |
 | `capture.py` | captura guiada estática/dinámica con muestreo fijo |
+| `capture_ui.py` | interfaz guiada de captura: cuadrícula, progreso y guardado automático |
+| `drawing.py` | utilidades de dibujo OpenCV compartidas por las interfaces |
 | `recognize.py` | máquina de estados de reconocimiento → eventos |
 | `text.py` | composición del texto (repetición, espacio, borrar) |
 | `train.py` | entrenamiento, split por sesión/bloque, métricas |

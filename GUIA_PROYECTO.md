@@ -6,7 +6,7 @@
 
 **Última actualización:** 2026-11-18
 **Ubicación oficial:** `C:\dev\TLSM` (fuera de OneDrive)
-**Repositorio local:** git, rama `main`, sin remoto todavía.
+**Repositorio remoto:** https://github.com/Exsoflex/TLSM-v2 (rama `main`).
 
 ---
 
@@ -102,15 +102,19 @@ offline en el lanzamiento y origen de los clips/avatar.
 
 **Fase 2 — núcleo v2 (2026-11-18)**
 - `config.py`, `features.py`, `landmarks.py`, `camera.py`, `datasets.py`, `capture.py`,
-  `recognize.py`, `text.py`, `voice.py`, `train.py`, `model_io.py`, `ui.py`, `gloss.py`,
-  `render.py`, `transcribe.py`.
-- Scripts: `importar_v1.py`, `entrenar.py`, `capturar.py`, `app.py`,
+  `capture_ui.py`, `drawing.py`, `recognize.py`, `text.py`, `voice.py`, `train.py`,
+  `model_io.py`, `ui.py`, `gloss.py`, `render.py`, `transcribe.py`.
+- Scripts: `importar_v1.py`, `entrenar.py`, `capturar.py`, `capturar_ui.py`, `app.py`,
   `generar_licencias.py`, además de los de la fase 0.
 - Paquete instalado en modo editable (`pip install -e .`).
-- **38 tests** en verde; `ruff check` y `ruff format` limpios.
+- **46 tests** en verde; `ruff check` y `ruff format` limpios.
 - Datos v1 convertidos a v2: 12,599 muestras estáticas y 709 secuencias dinámicas.
 - Modelos base entrenados y evaluados (sección 4.3).
 - La app de escritorio abre, detecta manos, clasifica letras y compone texto con voz.
+- **Repositorio remoto creado:** https://github.com/Exsoflex/TLSM-v2 (commit `f735dd0`).
+- **Interfaz de captura guiada** (`scripts/capturar_ui.py`): cuadrícula de 27 letras con
+  progreso, guía oficial por letra, rondas automáticas, guardado por ronda, reanudación de
+  sesión y auto-avance a la siguiente letra pendiente.
 
 ### 3.2 Lo que todavía NO está
 
@@ -119,7 +123,6 @@ offline en el lanzamiento y origen de los clips/avatar.
 - No hay validación con personas sordas ni con más firmantes.
 - No hay instalador (`PyInstaller`) ni versión web.
 - No hay avatar 3D ni clips de señas; solo el contrato y el glosador preliminar.
-- El repo no tiene remoto: `gh` está instalado pero **sin autenticar**.
 
 ### 3.3 Verificación rápida
 
@@ -129,6 +132,7 @@ cd C:\dev\TLSM
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
 .\.venv\Scripts\python.exe scripts\app.py
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --solo-faltantes
 ```
 
 ---
@@ -328,6 +332,8 @@ lógica, y añadir el avatar 3D sin reescribir.
 | Fuente de landmarks | `landmarks.py` | `FuenteManos.detectar_bgr(frame) -> list[FrameLandmarks]` |
 | Features | `features.py` | `features(puntos, handedness) -> float32[63]` |
 | Captura | `capture.py` | `CapturadorEstatico/Dinamico.actualizar(...) -> EstadoCaptura` |
+| Captura guiada (UI) | `capture_ui.py` | `AppCaptura.ejecutar() -> int`; sesión, rondas y progreso |
+| Dibujo compartido | `drawing.py` | `envolver_texto`, `dibujar_mano`, `barra_progreso` |
 | Clasificadores | `model_io.py` | `PaqueteModelo.predecir(X) -> (etiqueta, confianza, margen)` |
 | Reconocimiento | `recognize.py` | `Reconocedor.actualizar(deteccion) -> list[Evento]` |
 | Texto | `text.py` | `CompositorTexto.agregar_evento / actualizar_mano` |
@@ -385,7 +391,7 @@ lógica, y añadir el avatar 3D sin reescribir.
 - [x] Rutas con `ñ` renombradas a ASCII.
 - [x] `pyproject.toml`, `LICENSE` MIT, `THIRD_PARTY_LICENSES.md`.
 - [x] Datos, modelos y reportes fuera de git.
-- [ ] Publicar el repo remoto (bloqueado por autenticación de GitHub).
+- [x] Publicar el repo remoto: https://github.com/Exsoflex/TLSM-v2.
 
 **Criterio:** `git status` limpio, repo < 50 MB, `check_entorno` pasa. ✅
 
@@ -401,7 +407,8 @@ lógica, y añadir el avatar 3D sin reescribir.
 - [x] `ui.py` de escritorio.
 - [x] `gloss.py`, `render.py`, `transcribe.py` (contratos y primer adaptador).
 - [x] Importar v1 y entrenar línea base.
-- [x] 38 tests y lint limpios.
+- [x] Interfaz de captura guiada con cuadrícula, progreso y guardado automático.
+- [x] 46 tests y lint limpios.
 
 **Criterio:** pipeline de punta a punta con datos v1 y métricas honestas. ✅
 
@@ -479,6 +486,23 @@ data/processed/dynamic_v2.npz
 
 Los campos de etiqueta/`is_dynamic` se derivan del nombre del archivo y de
 `config.LETRAS_DINAMICAS`; no se duplican en el `.npz` para evitar inconsistencias.
+
+### 9.4 Protocolo de captura con `capturar_ui.py`
+
+1. **Preparar:** luz frontal, fondo limpio, cámara a 640×480, mano completa en el cuadro.
+2. **Identificar:** `--firmante S01` y una sesión por persona/día (`--sesion 2026-11-18_01`).
+   Repetir la misma sesión **retoma** el progreso; no sobrescribe lo anterior.
+3. **Configurar:** por defecto 3 rondas por letra, 100 muestras estáticas o 10 secuencias
+   de 20 frames por ronda. Para una primera pasada se puede bajar a 1 ronda.
+4. **Grabar:** elegir letra, `ESPACIO`, mantener la seña quieta (estáticas) o ejecutar el
+   movimiento tras la cuenta regresiva (dinámicas). `R` descarta una ronda mala.
+5. **Verificar:** cada letra completa se marca en verde; la app salta a la siguiente
+   pendiente. Al salir, repetir la sesión para confirmar el progreso.
+6. **Cerrar el ciclo:** `scripts/consolidar.py` y luego `scripts/entrenar.py`.
+
+**Reglas de calidad:** no cambiar de mano ni de distancia a mitad de una letra; evitar
+señas mezcladas; no usar la misma sesión para entrenar y evaluar sin separar por bloques;
+registrar en `--notas` cualquier cambio de cámara, luz o fondo.
 
 ---
 
@@ -582,6 +606,24 @@ Los campos de etiqueta/`is_dynamic` se derivan del nombre del archivo y de
   (split por bloques, una sola sesión).
 - **Siguiente:** fase 3, recaptura de las 27 letras con varias sesiones y firmantes.
 
+### 2026-11-18 — Repositorio remoto e interfaz de captura
+
+- Repo publicado en https://github.com/Exsoflex/TLSM-v2 (MIT, rama `main`).
+- Nuevo `src/tlsm/drawing.py`: `envolver_texto`, `dibujar_mano` y `barra_progreso`
+  compartidos; `ui.py` dejó de duplicarlos.
+- Nuevo `src/tlsm/capture_ui.py` y lanzador `scripts/capturar_ui.py`:
+  - cuadrícula de 27 letras con progreso por letra y marca `*` para las dinámicas;
+  - guía tomada del diccionario oficial para cada letra;
+  - rondas de 100 muestras estáticas o 10 secuencias de 20 frames;
+  - guardado automático por ronda, reanudación por sesión y auto-avance;
+  - atajos para elegir letra, saltar a la pendiente, descartar ronda y ver ayuda.
+- `datasets.contar_sesion()` para retomar una sesión y mostrar el progreso.
+- Pruebas nuevas: `contar_sesion`, render de panel/cuadrícula y transiciones de ronda
+  estática, dinámica, descarte y navegación. Total: **46 tests**.
+- Prueba real con cámara 0 (640×480): la interfaz compone y dibuja correctamente.
+- **Siguiente:** fase 3, capturar letras faltantes (P, R, S, T, U, V, W, Y; Q, X, Z) y
+  nuevas sesiones/firmantes con esta interfaz.
+
 ---
 
 ## 15. Comandos útiles
@@ -600,6 +642,7 @@ cd C:\dev\TLSM
 .\.venv\Scripts\python.exe scripts\app.py
 
 # Captura
+.\.venv\Scripts\python.exe scripts\capturar_ui.py
 .\.venv\Scripts\python.exe scripts\capturar.py --letra A --firmante S01
 
 # Consolidar sesiones nuevas
