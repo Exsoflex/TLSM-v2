@@ -78,8 +78,10 @@
 - Scripts nuevos:
   - `scripts/check_entorno.py` — verifica versiones, modelo y cámaras.
   - `scripts/demo_camara.py` — detección de manos con Tasks API, dibuja landmarks y FPS.
-- `README.md`, `requirements.txt`, `requirements.lock.txt`, `.gitignore`.
+- `README.md`, `requirements.txt`, `requirements.lock.txt`, `.gitignore`, `.gitattributes`.
 - Verificado en esta máquina: cámara `0` disponible a **640×480** (el driver no entrega 1280×720).
+- Repositorio git nuevo e independiente. Commit inicial: **`c116221`** (36 archivos, ~48 MB con datos y PDF).
+- **Sin remoto configurado a propósito** hasta decidir si se reutiliza `Exsoflex/TLSM` o se crea uno nuevo.
 
 ### 3.2 Lo que todavía NO funciona
 
@@ -511,7 +513,8 @@ El diccionario define **27 letras**: A–Z + Ñ. La sección de abecedario está
 - Extracción de texto del diccionario oficial y confirmación del abecedario:
   21 letras estáticas + 6 con movimiento (J, K, Ñ, Q, X, Z).
 - Herramientas evaluadas: MSL-150, SLT, MMS-Player, SignAvatars, SignWriting, faster-whisper, Piper, ONNX, MediaPipe Web.
-- **Siguiente:** Fase 1 (reacomodo) y commit inicial.
+- Commit inicial `c116221` en el repo nuevo (sin remoto todavía).
+- **Siguiente:** Fase 1 (reacomodo).
 
 ---
 
