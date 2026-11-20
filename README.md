@@ -25,11 +25,11 @@ Repositorio: **https://github.com/Exsoflex/TLSM-v2**
 | 4. Producto (instalable, web) | pendiente |
 | 5. Palabras, bidireccionalidad y avatar 3D | pendiente |
 
-**Línea base con los datos v1 (13 letras estáticas):**
+**Línea base con los datos v1 + primera sesión v2 (13 letras estáticas):**
 
 | Modelo | Split | Accuracy | Macro-F1 |
 |---|---|---|---|
-| Estático | bloques contiguos por clase | **0.981** | **0.982** |
+| Estático | bloques contiguos por clase | **0.982** | **0.983** |
 | Dinámico (J, K, Ñ, Hola) | bloques contiguos por clase | **0.986** | **0.983** |
 
 Son datos de un solo firmante y una sola sesión, así que **no** equivalen a la meta de
@@ -92,17 +92,6 @@ Para desarrollo:
 .\.venv\Scripts\python.exe scripts\consolidar.py
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
 ```
-
-### Teclas de la app de reconocimiento
-
-| Tecla | Acción |
-|---|---|
-| `ESPACIO` | agregar espacio |
-| `B` / `Retroceso` | borrar último carácter |
-| `C` | limpiar texto |
-| `V` | hablar el texto (TTS) |
-| `L` | mostrar/ocultar landmarks |
-| `Q` / `ESC` | salir |
 
 ## Captura guiada de datos
 
@@ -174,6 +163,97 @@ Al terminar, consolida y reentrena:
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
 ```
 
+## Detector y entrenamiento
+
+El **detector principal** es `scripts/app.py` (interfaz OpenCV) sobre `src/tlsm/recognize.py`.
+Combina dos modelos:
+
+- **Estático:** letras con la mano quieta (A–I, L, M, N, O en el modelo actual).
+- **Dinámico:** secuencias de 20 frames (J, K, Ñ y Hola en el modelo actual).
+
+No hay que programar nada para añadir una letra: se captura, se consolida y se reentrena.
+El modelo aprende las clases que existan en el dataset, sin tocar código. **Lo que no esté
+entrenado no se reconoce**; si haces una letra nueva, el modelo responderá con la más parecida
+de las que conoce.
+
+### Flujo completo
+
+```powershell
+# 1. Capturar (interfaz guiada)
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-20_01
+
+# 2. Sumar las sesiones nuevas al dataset (se puede repetir sin duplicar)
+.\.venv\Scripts\python.exe scripts\consolidar.py
+
+# 3. Entrenar los dos modelos
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
+
+# 4. Usar el detector
+.\.venv\Scripts\python.exe scripts\app.py
+```
+
+`consolidar.py` **conserva** lo que ya estaba procesado (incluida la v1) y **reemplaza**
+solo las sesiones que aparezcan en `data/raw`. Ejecutarlo dos veces no duplica datos.
+
+### Qué produce el entrenamiento
+
+| Archivo | Contenido |
+|---|---|
+| `models/estatico_v2.joblib` | modelo de letras quietas + etiquetas + metadatos |
+| `models/dinamico_v2.joblib` | modelo de movimientos + etiquetas + metadatos |
+| `reports/estatico_<fecha>.json` | accuracy, macro-F1, métricas por clase y matriz |
+| `reports/estatico_<fecha>.png` | matriz de confusión legible |
+| `reports/dinamico_<fecha>.json/.png` | lo mismo para movimientos |
+
+Opciones útiles:
+
+```powershell
+# Forzar un tipo de división (por defecto "auto")
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --split sesion
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --split bloque
+
+# Cambiar el tamaño de prueba o la semilla
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --test-size 0.25 --seed 7
+
+# Guardar en otra ruta o no generar el reporte
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico --salida models/prueba.joblib --sin-reporte
+```
+
+**Cómo leer las métricas:** `accuracy` es el porcentaje total; **macro-F1** promedia las
+clases sin favorecer a las mayoritarias. El split `bloque` divide por tramos contiguos y sirve
+cuando hay una sola sesión; el split `sesion` es el honesto y necesita al menos 3 sesiones.
+Nunca uses `--split aleatorio` para reportar: mezcla frames casi idénticos y da métricas falsas.
+
+### Teclas del detector (`scripts/app.py`)
+
+| Tecla | Acción |
+|---|---|
+| `ESPACIO` | agregar un espacio al texto |
+| `B` / `Retroceso` | borrar el último carácter |
+| `C` | limpiar el texto |
+| `V` | decir el texto con voz (TTS) |
+| `L` | mostrar u ocultar los landmarks |
+| `R` | reiniciar el reconocimiento |
+| `Q` / `ESC` | salir |
+
+```powershell
+# Sin voz, o con otra cámara o modelos
+.\.venv\Scripts\python.exe scripts\app.py --sin-voz
+.\.venv\Scripts\python.exe scripts\app.py --camara 1
+.\.venv\Scripts\python.exe scripts\app.py --modelo models\estatico_v2.joblib
+```
+
+### Para reconocer las 27 letras
+
+1. Captura las que faltan: estáticas **P, R, S, T, U, V, W, Y** y dinámicas **Q, X, Z**.
+2. Repite con varias sesiones y, si puedes, varios firmantes.
+3. Consolida y reentrena. El detector pasará a mostrar esas clases automáticamente.
+
+Las palabras y frases **no** están implementadas todavía: el detector actual es de letras y
+movimientos aislados. Esa es la Fase 5 del plan y requiere otro dataset y, probablemente, un
+modelo de secuencias.
+
 ## Estructura
 
 ```
@@ -219,6 +299,7 @@ TLSM/
 
 - **v1 estático:** 12,599 muestras de 13 letras (A–I, L, M, N, O), solo `x,y`.
 - **v1 dinámico:** 709 secuencias de 20 frames (J, K, Ñ, Hola).
+- **Primera sesión v2:** `2026-11-20_1307`, 300 muestras de A capturadas con la interfaz.
 - **Abecedario oficial:** 27 letras. Faltan por capturar:
   - estáticas: **P, R, S, T, U, V, W, Y**
   - dinámicas: **Q, X, Z**

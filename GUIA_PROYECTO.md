@@ -107,7 +107,7 @@ offline en el lanzamiento y origen de los clips/avatar.
 - Scripts: `importar_v1.py`, `entrenar.py`, `capturar.py`, `capturar_ui.py`, `app.py`,
   `generar_licencias.py`, además de los de la fase 0.
 - Paquete instalado en modo editable (`pip install -e .`).
-- **46 tests** en verde; `ruff check` y `ruff format` limpios.
+- **50 tests** en verde; `ruff check` y `ruff format` limpios.
 - Datos v1 convertidos a v2: 12,599 muestras estáticas y 709 secuencias dinámicas.
 - Modelos base entrenados y evaluados (sección 4.3).
 - La app de escritorio abre, detecta manos, clasifica letras y compone texto con voz.
@@ -115,11 +115,17 @@ offline en el lanzamiento y origen de los clips/avatar.
 - **Interfaz de captura guiada** (`scripts/capturar_ui.py`): cuadrícula de 27 letras con
   progreso, guía oficial por letra, rondas automáticas, guardado por ronda, reanudación de
   sesión y auto-avance a la siguiente letra pendiente.
+- **Primera sesión v2 capturada:** `2026-11-20_1307`, 300 muestras de A (3 rondas).
+- `consolidar.py` ahora **suma** las sesiones de `data/raw` al dataset procesado y reemplaza
+  solo las sesiones repetidas; antes habría borrado la v1. Opción `--desde-cero` para
+  reconstruir solo desde `data/raw`.
 
 ### 3.2 Lo que todavía NO está
 
 - Faltan **15 letras** del abecedario oficial: estáticas P, R, S, T, U, V, W, Y
-  y dinámicas Q, X, Z. (Las 13 estáticas y 3 dinámicas existentes vienen de la v1.)
+  y dinámicas Q, X, Z. (Las 13 estáticas y 3 dinámicas existentes vienen de la v1;
+  A ya tiene una sesión nueva de 300 muestras.)
+- No hay detector de palabras ni frases: solo letras y movimientos aislados.
 - No hay validación con personas sordas ni con más firmantes.
 - No hay instalador (`PyInstaller`) ni versión web.
 - No hay avatar 3D ni clips de señas; solo el contrato y el glosador preliminar.
@@ -154,19 +160,21 @@ cd C:\dev\TLSM
 - Mezcla letras con una palabra en el mismo clasificador.
 - RandomForest sobre el vector aplanado: pierde el orden temporal.
 
-### 4.3 Línea base v2 (medición real de esta sesión)
+### 4.3 Línea base v2 (medición real)
 
-Conversión con `scripts/importar_v1.py` y entrenamiento con
-`scripts/entrenar.py --tipo ...`. Split **bloque** (80/20 contiguo por clase) porque
-todos los datos v1 pertenecen a una sola sesión.
+Conversión con `scripts/importar_v1.py` y entrenamiento con `scripts/entrenar.py --tipo ...`.
+El **2026-11-20** se sumó la primera sesión v2 (`2026-11-20_1307`, 300 muestras de A) y se
+reentrenó. Split **bloque** (80/20 contiguo por clase) porque hay dos sesiones, pero una es
+la v1 completa; el split por sesión honesto requiere al menos 3.
 
 | Modelo | Train / Test | Accuracy | Macro-F1 |
 |---|---|---|---|
-| Estático (13 clases) | 10,079 / 2,520 | **0.981** | **0.982** |
-| Dinámico (4 clases) | 568 / 141 | **0.986** | **0.983** |
+| Estático (13 clases, 12,899 muestras) | 10,319 / 2,580 | **0.982** | **0.983** |
+| Dinámico (4 clases, 709 secuencias) | 568 / 141 | **0.986** | **0.983** |
 
-Clases con más error en estático: A (precisión 0.91), D (recall 0.89), O (recall 0.86).
-El resto está en 0.93–1.00.
+Clases con más error en estático: D (recall 0.89), O (recall 0.86), A (precisión 0.94).
+El resto está en 0.94–1.00. El dinámico mantiene J, HOLA y Ñ casi perfectos; K tiene
+recall 0.93.
 
 **Comparación con la v1:**
 
@@ -408,12 +416,13 @@ lógica, y añadir el avatar 3D sin reescribir.
 - [x] `gloss.py`, `render.py`, `transcribe.py` (contratos y primer adaptador).
 - [x] Importar v1 y entrenar línea base.
 - [x] Interfaz de captura guiada con cuadrícula, progreso y guardado automático.
-- [x] 46 tests y lint limpios.
+- [x] 50 tests y lint limpios.
 
 **Criterio:** pipeline de punta a punta con datos v1 y métricas honestas. ✅
 
-### Fase 3 — Recaptura del abecedario ⏳ siguiente
+### Fase 3 — Recaptura del abecedario ⏳ en curso
 
+- [x] Primera sesión v2 capturada con la interfaz guiada: 300 muestras de A.
 - [ ] Capturar las **27 letras** (21 estáticas + 6 dinámicas).
 - [ ] Mínimo 3 sesiones por letra; idealmente 2+ firmantes.
 - [ ] Registrar metadatos: firmante, sesión, cámara, distancia, iluminación, fondo.
@@ -498,7 +507,8 @@ Los campos de etiqueta/`is_dynamic` se derivan del nombre del archivo y de
    movimiento tras la cuenta regresiva (dinámicas). `R` descarta una ronda mala.
 5. **Verificar:** cada letra completa se marca en verde; la app salta a la siguiente
    pendiente. Al salir, repetir la sesión para confirmar el progreso.
-6. **Cerrar el ciclo:** `scripts/consolidar.py` y luego `scripts/entrenar.py`.
+6. **Cerrar el ciclo:** `scripts/consolidar.py` (suma sin borrar la v1) y luego
+   `scripts/entrenar.py --tipo estatico` y `--tipo dinamico`.
 
 **Reglas de calidad:** no cambiar de mano ni de distancia a mitad de una letra; evitar
 señas mezcladas; no usar la misma sesión para entrenar y evaluar sin separar por bloques;
@@ -619,10 +629,29 @@ registrar en `--notas` cualquier cambio de cámara, luz o fondo.
   - atajos para elegir letra, saltar a la pendiente, descartar ronda y ver ayuda.
 - `datasets.contar_sesion()` para retomar una sesión y mostrar el progreso.
 - Pruebas nuevas: `contar_sesion`, render de panel/cuadrícula y transiciones de ronda
-  estática, dinámica, descarte y navegación. Total: **46 tests**.
+  estática, dinámica, descarte y navegación. Total: **46 tests** (después 50 con la
+  consolidación incremental).
 - Prueba real con cámara 0 (640×480): la interfaz compone y dibuja correctamente.
 - **Siguiente:** fase 3, capturar letras faltantes (P, R, S, T, U, V, W, Y; Q, X, Z) y
   nuevas sesiones/firmantes con esta interfaz.
+
+### 2026-11-20 — Consolidación incremental y reentrenamiento
+
+- Detectado un fallo de flujo: `consolidar.py` reconstruía `data/processed` solo con
+  `data/raw` y habría borrado las 12,599 muestras de la v1.
+- Nuevo `datasets.mezclar_procesado()`: conserva sesiones ajenas a `data/raw` y reemplaza
+  completas las sesiones recapturadas; ejecutar `consolidar.py` dos veces no duplica.
+- `consolidar.py` gana `--desde-cero` (reconstruir solo desde `data/raw`) y muestra
+  sesiones y firmantes.
+- Primera sesión v2 capturada: `2026-11-20_1307`, 300 muestras de A. El dataset estático
+  pasa a 12,899 muestras; el dinámico sigue en 709.
+- Reentrenados ambos modelos: estático **0.982 accuracy / 0.983 macro-F1**; dinámico
+  **0.986 / 0.983** (split bloque).
+- Probado el detector `scripts/app.py` con los modelos nuevos: abre, carga las 13 clases
+  estáticas y las 4 dinámicas y detecta manos.
+- **50 tests** en verde; lint limpio.
+- **Siguiente:** capturar P, R, S, T, U, V, W, Y (estáticas) y Q, X, Z (dinámicas), y
+  sumar más sesiones/firmantes antes de congelar el dataset.
 
 ---
 

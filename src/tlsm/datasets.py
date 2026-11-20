@@ -256,6 +256,43 @@ def cargar_procesado(archivo: Path | str) -> dict:
         return datos
 
 
+def mezclar_procesado(previo: dict | None, nuevo: dict) -> dict:
+    """Incorpora sesiones nuevas a un dataset procesado sin duplicarlas.
+
+    Las muestras cuya sesión aparece en `nuevo` se reemplazan completas; el resto
+    se conserva. Así `consolidar.py` puede ejecutarse varias veces sin duplicar y
+    sin borrar datos que no vienen de `data/raw` (por ejemplo, la v1 importada).
+    """
+    if not previo or len(previo.get("X", [])) == 0:
+        return dict(nuevo)
+
+    sesiones_nuevas = np.unique(np.asarray(nuevo["sesion"]).astype(str))
+    conservar = ~np.isin(np.asarray(previo["sesion"]).astype(str), sesiones_nuevas)
+    if not conservar.any():
+        return dict(nuevo)
+
+    resultado = {
+        "X": np.concatenate([np.asarray(previo["X"])[conservar], nuevo["X"]], axis=0),
+        "y": np.concatenate([np.asarray(previo["y"])[conservar], nuevo["y"]]),
+        "sesion": np.concatenate([np.asarray(previo["sesion"])[conservar], nuevo["sesion"]]),
+        "firmante": np.concatenate([np.asarray(previo["firmante"])[conservar], nuevo["firmante"]]),
+    }
+    if "raw" in previo and "raw" in nuevo:
+        resultado["raw"] = np.concatenate(
+            [np.asarray(previo["raw"])[conservar], nuevo["raw"]], axis=0
+        )
+    if "fps" in previo and "fps" in nuevo:
+        if round(float(previo["fps"]), 3) != round(float(nuevo["fps"]), 3):
+            raise ValueError(
+                f"FPS incompatibles: {previo['fps']} en el dataset previo y "
+                f"{nuevo['fps']} en las sesiones nuevas"
+            )
+        resultado["fps"] = float(nuevo["fps"])
+    elif "fps" in nuevo:
+        resultado["fps"] = float(nuevo["fps"])
+    return resultado
+
+
 def importar_v1_estatico(
     csv_path: Path | str, salida: Path | str, cfg: ConfigFeatures | None = None
 ) -> dict:
@@ -367,5 +404,6 @@ __all__ = [
     "hash_archivo",
     "importar_v1_dinamico",
     "importar_v1_estatico",
+    "mezclar_procesado",
     "resumen_etiquetas",
 ]

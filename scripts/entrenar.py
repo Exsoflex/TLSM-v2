@@ -42,7 +42,10 @@ def main() -> int:
     )
     if not datos.exists():
         print(f"No existe el dataset: {datos}")
-        print("Ejecuta primero: python scripts/importar_v1.py")
+        print(
+            "Ejecuta primero: python scripts/consolidar.py "
+            "(o scripts/importar_v1.py si aún no importaste la v1)"
+        )
         return 1
 
     datos_npz = cargar_procesado(datos)

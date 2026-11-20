@@ -7,10 +7,13 @@ from tlsm.datasets import (
     Metadatos,
     cargar_dinamico,
     cargar_estatico,
+    cargar_procesado,
     combinar_dinamicos,
     combinar_estaticos,
     guardar_dinamico,
     guardar_estatico,
+    guardar_procesado,
+    mezclar_procesado,
     resumen_etiquetas,
 )
 
@@ -76,3 +79,68 @@ def test_dinamico_rechaza_forma_incorrecta(tmp_path):
             15.0,
             meta,
         )
+
+
+def _procesado(sesion: str, etiqueta: str, n: int = 2) -> dict:
+    X, raw = _estatico(n)
+    return {
+        "X": X,
+        "raw": raw,
+        "y": np.array([etiqueta] * n, dtype=str),
+        "sesion": np.array([sesion] * n, dtype=str),
+        "firmante": np.array(["S01"] * n, dtype=str),
+    }
+
+
+def test_mezclar_procesado_conserva_y_agrega():
+    previo = _procesado("v1", "A", 3)
+    nuevo = _procesado("s2", "B", 2)
+
+    combinado = mezclar_procesado(previo, nuevo)
+
+    assert len(combinado["X"]) == 5
+    assert resumen_etiquetas(combinado["y"]) == {"A": 3, "B": 2}
+    assert set(combinado["sesion"]) == {"v1", "s2"}
+    assert combinado["raw"].shape == (5, 21, 3)
+
+
+def test_mezclar_procesado_reemplaza_sesion_sin_duplicar():
+    previo = _procesado("v1", "A", 3)
+    primera = _procesado("s2", "B", 2)
+    combinado = mezclar_procesado(previo, primera)
+
+    recapturada = _procesado("s2", "B", 4)
+    combinado = mezclar_procesado(combinado, recapturada)
+
+    assert len(combinado["X"]) == 7
+    assert resumen_etiquetas(combinado["y"]) == {"A": 3, "B": 4}
+    assert list(combinado["sesion"]).count("s2") == 4
+
+
+def test_mezclar_procesado_sin_previo_y_fps():
+    nuevo = _procesado("s2", "J", 1)
+    nuevo["fps"] = 15.0
+    assert mezclar_procesado(None, nuevo) is not nuevo
+    assert mezclar_procesado(None, nuevo)["fps"] == 15.0
+
+    previo = dict(nuevo)
+    previo["sesion"] = np.array(["s1"], dtype=str)
+    previo["fps"] = 12.0
+    with pytest.raises(ValueError):
+        mezclar_procesado(previo, nuevo)
+
+
+def test_guardar_y_cargar_procesado(tmp_path):
+    datos = _procesado("s1", "A", 2)
+    ruta = guardar_procesado(
+        tmp_path / "static_v2.npz",
+        datos["X"],
+        datos["y"],
+        datos["sesion"],
+        datos["firmante"],
+        raw=datos["raw"],
+    )
+    recuperado = cargar_procesado(ruta)
+    assert recuperado["X"].shape == (2, 63)
+    assert set(recuperado["y"]) == {"A"}
+    assert set(recuperado["sesion"]) == {"s1"}
