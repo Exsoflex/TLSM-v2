@@ -75,7 +75,7 @@ Para desarrollo:
 # 3. App de reconocimiento (requiere un modelo entrenado)
 .\.venv\Scripts\python.exe scripts\app.py
 
-# 4. Convertir los datos v1 al esquema v2
+# 4. Convertir los datos v1 al esquema v2 (solo la primera vez)
 .\.venv\Scripts\python.exe scripts\importar_v1.py
 
 # 5. Entrenar modelos v2
@@ -89,8 +89,10 @@ Para desarrollo:
 .\.venv\Scripts\python.exe scripts\capturar.py --letra A --firmante S01
 
 # 7. Consolidar sesiones capturadas y reentrenar
+#    (consolidar suma sin borrar; se puede repetir)
 .\.venv\Scripts\python.exe scripts\consolidar.py
 .\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
 ```
 
 ## Captura guiada de datos
@@ -317,7 +319,9 @@ TLSM/
 
 ## Documentación
 
-- `GUIA_PROYECTO.md` — visión, decisiones, arquitectura, plan, riesgos y bitácora.
+- **[GUIA_PROYECTO.md](GUIA_PROYECTO.md)** — visión, decisiones, arquitectura, plan, riesgos,
+  bitácora y **manual de uso completo** (sección 16: captura → consolidación → entrenamiento
+  → detector).
 - `THIRD_PARTY_LICENSES.md` — cumplimiento de licencias.
 - `docs/diccionario_oficial.pdf` — *Diccionario de Lengua de Señas Mexicana "Manos con voz"* (2011).
 - `docs/diccionario_oficial.txt` — texto extraído para búsquedas.

@@ -4,9 +4,10 @@
 > Se actualiza al final de cada etapa. Si algo aquí contradice al código, gana el código
 > y hay que corregir este documento.
 
-**Última actualización:** 2026-11-18
+**Última actualización:** 2026-11-20
 **Ubicación oficial:** `C:\dev\TLSM` (fuera de OneDrive)
 **Repositorio remoto:** https://github.com/Exsoflex/TLSM-v2 (rama `main`).
+**Manual operativo:** sección 16 (captura → consolidación → entrenamiento → detector).
 
 ---
 
@@ -119,6 +120,10 @@ offline en el lanzamiento y origen de los clips/avatar.
 - `consolidar.py` ahora **suma** las sesiones de `data/raw` al dataset procesado y reemplaza
   solo las sesiones repetidas; antes habría borrado la v1. Opción `--desde-cero` para
   reconstruir solo desde `data/raw`.
+- `importar_v1.py` también mezcla: reimportar la v1 conserva las sesiones nuevas.
+- **Manual operativo completo en la sección 16:** preparación, captura, consolidación,
+  entrenamiento, detector, flujo para añadir letras, ejemplo de jornada, problemas comunes
+  y checklist.
 
 ### 3.2 Lo que todavía NO está
 
@@ -581,7 +586,7 @@ registrar en `--notas` cualquier cambio de cámara, luz o fondo.
 3. **Avatar:** ¿clips 2D primero o rig 3D desde el inicio? Propuesta: clips, mismo contrato.
 4. **Dos manos:** ¿desde el abecedario o solo en palabras? Propuesta: una mano para letras.
 5. **ASR:** ¿requisito del lanzamiento offline o fase 5? Propuesta: fase 5, interfaz lista.
-6. **Repo remoto:** `gh` no está autenticado. Hace falta `gh auth login` o un token.
+6. **Repo remoto:** resuelto; el proyecto vive en `Exsoflex/TLSM-v2`.
 
 ---
 
@@ -649,6 +654,8 @@ registrar en `--notas` cualquier cambio de cámara, luz o fondo.
   **0.986 / 0.983** (split bloque).
 - Probado el detector `scripts/app.py` con los modelos nuevos: abre, carga las 13 clases
   estáticas y las 4 dinámicas y detecta manos.
+- `importar_v1.py` ahora es incremental: reimportar la v1 no borra las sesiones nuevas.
+- Manual de uso completo agregado a la guía (sección 16) y enlazado desde el README.
 - **50 tests** en verde; lint limpio.
 - **Siguiente:** capturar P, R, S, T, U, V, W, Y (estáticas) y Q, X, Z (dinámicas), y
   sumar más sesiones/firmantes antes de congelar el dataset.
@@ -698,7 +705,358 @@ git commit -m "Fase 2: nucleo v2, modelos base y UI"
 
 ---
 
-## 16. Archivos del legado (no borrar por accidente)
+## 16. Manual de uso completo: captura → entrenamiento → detector
+
+Esta sección explica el recorrido operativo completo. Para comandos sueltos, ver la
+sección 15.
+
+### 16.1 Preparación (una vez por equipo)
+
+```powershell
+# Entrar al proyecto (nunca trabajes desde OneDrive)
+cd C:\dev\TLSM
+
+# Crear el entorno solo la primera vez
+py -3.11 -m venv .venv
+
+# Instalar el paquete y las herramientas de desarrollo
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+
+# Verificar Python, MediaPipe, modelo de manos y cámara
+.\.venv\Scripts\python.exe scripts\check_entorno.py
+```
+
+Si el `.venv` ya existe, basta con:
+
+```powershell
+cd C:\dev\TLSM
+.\.venv\Scripts\python.exe scripts\check_entorno.py
+```
+
+**Importar la v1 (solo si todavía no está importada):**
+
+```powershell
+.\.venv\Scripts\python.exe scripts\importar_v1.py
+```
+
+La importación es segura: reemplaza únicamente la sesión llamada `v1` y conserva las
+sesiones nuevas que ya estén consolidadas. Los datos quedan en:
+
+```
+data/raw/<sesion>/              # capturas nuevas
+data/processed/static_v2.npz    # dataset para entrenar
+data/processed/dynamic_v2.npz
+models/estatico_v2.joblib       # modelos entrenados
+models/dinamico_v2.joblib
+reports/                        # métricas y matrices
+```
+
+Los datasets, modelos y reportes **no se versionan en git**; se regeneran con los scripts.
+
+### 16.2 Captura guiada de datos
+
+```powershell
+# Sesión nueva: pregunta firmante y nombre de sesión
+.\.venv\Scripts\python.exe scripts\capturar_ui.py
+
+# Todo explícito
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-21_01
+
+# Solo las letras que faltan en el abecedario
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-21_01 `
+  --letras P,R,S,T,U,V,W,Y,Q,X,Z --rondas 3
+```
+
+**Qué muestra la pantalla:**
+
+- Cámara y landmarks de la mano a la izquierda.
+- Letra actual, tipo (estática/dinámica), guía oficial y mensajes a la derecha.
+- Barra de progreso de la ronda y rondas hechas.
+- Cuadrícula de las 27 letras: gris = sin datos, amarillo = en progreso, verde = completa,
+  `*` = letra dinámica.
+- `H` abre la ayuda dentro de la app.
+
+**Paso a paso:**
+
+1. Escribe el firmante (`S01`) y la sesión (`2026-11-21_01`). Enter acepta el valor sugerido.
+2. Elige una letra con las flechas (o `A`/`D`/`W`/`S`).
+3. Pulsa `ESPACIO`.
+4. **Estática:** espera la cuenta regresiva y mantén la seña quieta. Se guardan 100 muestras
+   por ronda; los frames con movimiento se descartan.
+5. **Dinámica:** tras la cuenta regresiva ejecuta el movimiento. Se guardan 10 secuencias de
+   20 frames por ronda, muestreadas a 15 fps.
+6. Cada ronda se guarda sola. Al completar 3 rondas la letra se pone verde y la app salta a
+   la siguiente pendiente. `TAB` también salta a la siguiente pendiente.
+7. `Q` o `ESC` sale; todo lo guardado se conserva.
+
+| Tecla | Acción |
+|---|---|
+| `ESPACIO` | iniciar o continuar una ronda |
+| `TAB` | ir a la siguiente letra pendiente |
+| Flechas / `A` `D` `W` `S` | moverse por la cuadrícula |
+| `R` | descartar la ronda en curso |
+| `H` | mostrar u ocultar la ayuda |
+| `Q` / `ESC` | salir |
+
+| Opción | Por defecto | Para qué |
+|---|---|---|
+| `--firmante` | pregunta / `S01` | identifica a la persona |
+| `--sesion` | fecha y hora | agrupa datos y permite retomar |
+| `--letras` | todas | lista separada por comas (`A,B,J`) |
+| `--rondas` | `3` | rondas por letra |
+| `--muestras-ronda` | `100` | muestras por ronda estática |
+| `--secuencias-ronda` | `10` | secuencias por ronda dinámica |
+| `--solo-faltantes` | desactivado | empieza en la primera pendiente de la sesión |
+| `--sin-auto-avance` | desactivado | no cambia de letra al completarla |
+| `--camara` | `0` | índice de cámara |
+| `--sin-espejo` | desactivado | desactiva el espejo de la imagen |
+| `--notas` | vacío | distancia, luz, fondo u observaciones |
+
+**Reanudar:** si repites el mismo `--sesion`, la app lee `data/raw/<sesion>/` y continúa desde
+la última ronda guardada. Cada sesión nueva empieza en 0 aunque la letra ya exista en la v1:
+eso es correcto, porque cada sesión es un dominio distinto.
+
+**Recomendaciones de calidad:**
+
+- Luz frontal, fondo limpio y mano completa dentro del cuadro.
+- No cambies de mano, distancia ni cámara a mitad de una letra.
+- Si una ronda sale mal, descártala con `R`.
+- Graba varias sesiones y, si puedes, varios firmantes. Un solo firmante hace que el modelo
+  memorice a la persona.
+- No mezcles letras: si dudas, repite la seña en otra ronda.
+
+Los archivos quedan como `data/raw/<sesion>/static_<LETRA>.npz` y
+`data/raw/<sesion>/dynamic_<LETRA>.npz`.
+
+### 16.3 Consolidar las sesiones
+
+```powershell
+.\.venv\Scripts\python.exe scripts\consolidar.py
+```
+
+Qué hace:
+
+- Toma todas las carpetas de `data/raw/`.
+- Las suma a `data/processed/static_v2.npz` y `dynamic_v2.npz`.
+- **Conserva** los datos que no vienen de `data/raw` (por ejemplo, la v1).
+- **Reemplaza** completas las sesiones que ya estaban consolidadas, sin duplicarlas.
+- Verifica que los FPS de las secuencias dinámicas coincidan.
+
+Se puede ejecutar las veces que haga falta; el resultado es idempotente. Salida típica:
+
+```
+Estatico: 12899 muestras -> C:\dev\TLSM\data\processed\static_v2.npz
+  clases: {'A': 1200, 'B': 900, ...}
+  firmantes: ['S01', 'v1']
+  sesiones: ['2026-11-20_1307', 'v1']
+```
+
+**`--desde-cero`:** ignora el dataset procesado anterior y reconstruye solo con `data/raw`.
+Úsalo únicamente si quieres descartar la v1; si lo usas sin querer, vuelve a ejecutar
+`scripts/importar_v1.py`.
+
+### 16.4 Entrenar los modelos
+
+```powershell
+# Letras con la mano quieta
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+
+# Movimientos (J, K, Ñ, Hola, ...)
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
+```
+
+Cada comando:
+
+1. Carga el dataset procesado.
+2. Divide entrenamiento/prueba de forma honesta.
+3. Entrena un `RandomForestClassifier`.
+4. Evalúa y guarda el paquete `.joblib` con etiquetas y metadatos.
+5. Genera un reporte JSON y una matriz de confusión PNG.
+
+| Split | Cuándo se usa | Qué significa |
+|---|---|---|
+| `auto` (defecto) | siempre | `sesion` si hay 3+ sesiones; si no, `bloque` |
+| `sesion` | 3+ sesiones | sesiones completas separadas; es el honesto |
+| `bloque` | 1–2 sesiones | 80/20 contiguo por clase; aproximación temporal |
+| `aleatorio` | solo diagnóstico | mezcla frames casi idénticos; **no reportar** |
+
+Salidas:
+
+| Archivo | Contenido |
+|---|---|
+| `models/estatico_v2.joblib` | modelo estático + etiquetas + metadatos |
+| `models/dinamico_v2.joblib` | modelo dinámico + etiquetas + metadatos |
+| `reports/estatico_<fecha>.json` | accuracy, macro-F1, métricas por clase, matriz |
+| `reports/estatico_<fecha>.png` | matriz de confusión legible |
+| `reports/dinamico_<fecha>.json/.png` | lo mismo para movimientos |
+
+Opciones:
+
+```powershell
+# Forzar el tipo de split
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --split sesion
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --split bloque
+
+# Cambiar proporción de prueba y semilla
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico --test-size 0.25 --seed 7
+
+# Otra ruta de salida o sin reporte
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico `
+  --salida models/prueba.joblib --sin-reporte
+```
+
+**Cómo leer las métricas:**
+
+- `accuracy`: porcentaje total de aciertos.
+- `macro-F1`: promedio por clase, sin favorecer a las clases con más muestras. Es la métrica
+  que importa cuando hay clases desbalanceadas.
+- Matriz de confusión: filas = seña real, columnas = predicción. Los errores fuera de la
+  diagonal indican qué letras se confunden.
+- Los metadatos del `.joblib` guardan split, semilla, número de muestras y versión de features.
+
+Línea base actual (2026-11-20, split `bloque`):
+
+| Modelo | Datos | Accuracy | Macro-F1 |
+|---|---|---|---|
+| Estático | 12,899 muestras, 13 clases | **0.982** | **0.983** |
+| Dinámico | 709 secuencias, 4 clases | **0.986** | **0.983** |
+
+Para ver qué clases reconoce un modelo:
+
+```powershell
+.\.venv\Scripts\python.exe -c "from tlsm.config import MODELO_ESTATICO, MODELO_DINAMICO; from tlsm.model_io import cargar_modelo; print('estatico:', cargar_modelo(MODELO_ESTATICO).etiquetas); print('dinamico:', cargar_modelo(MODELO_DINAMICO).etiquetas)"
+```
+
+### 16.5 Usar el detector principal
+
+```powershell
+.\.venv\Scripts\python.exe scripts\app.py
+```
+
+La ventana muestra la cámara, los landmarks y un panel con:
+
+- Texto compuesto.
+- Seña actual y confianza.
+- Estado de los modelos cargados.
+- FPS y avisos (por ejemplo, si la voz no está disponible).
+
+| Tecla | Acción |
+|---|---|
+| `ESPACIO` | agregar un espacio al texto |
+| `B` / `Retroceso` | borrar el último carácter |
+| `C` | limpiar el texto |
+| `V` | decir el texto con voz (TTS) |
+| `L` | mostrar u ocultar los landmarks |
+| `R` | reiniciar el reconocimiento |
+| `Q` / `ESC` | salir |
+
+Opciones:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\app.py --sin-voz
+.\.venv\Scripts\python.exe scripts\app.py --camara 1
+.\.venv\Scripts\python.exe scripts\app.py --sin-espejo
+.\.venv\Scripts\python.exe scripts\app.py --modelo models\estatico_v2.joblib
+.\.venv\Scripts\python.exe scripts\app.py --modelo-dinamico models\dinamico_v2.joblib
+.\.venv\Scripts\python.exe scripts\app.py --sin-modelo   # solo detectar manos
+```
+
+Clases actuales:
+
+- Estáticas: A, B, C, D, E, F, G, H, I, L, M, N, O.
+- Dinámicas: J, K, Ñ, HOLA.
+
+**Importante:** el detector solo puede devolver clases entrenadas. Si haces P, R, S, T, U,
+V, W, Y, Q, X o Z, responderá con la clase más parecida de las que conoce. Para reconocerlas
+hay que capturarlas y reentrenar.
+
+El detector es de **letras y movimientos aislados**, no de palabras o frases completas. La
+traducción de vocabulario y el avatar 3D son fases posteriores.
+
+### 16.6 Flujo para añadir letras nuevas
+
+No hace falta tocar código: el modelo aprende las clases que existan en el dataset.
+
+```powershell
+# 1. Capturar solo las letras faltantes
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-21_01 `
+  --letras P,R,S,T,U,V,W,Y,Q,X,Z --rondas 3
+
+# 2. Consolidar (suma, no borra)
+.\.venv\Scripts\python.exe scripts\consolidar.py
+
+# 3. Reentrenar ambos modelos
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
+
+# 4. Comprobar que las clases nuevas aparecen
+.\.venv\Scripts\python.exe -c "from tlsm.config import MODELO_ESTATICO, MODELO_DINAMICO; from tlsm.model_io import cargar_modelo; print(cargar_modelo(MODELO_ESTATICO).etiquetas); print(cargar_modelo(MODELO_DINAMICO).etiquetas)"
+
+# 5. Usar
+.\.venv\Scripts\python.exe scripts\app.py
+```
+
+Repite el ciclo con **varias sesiones y firmantes** hasta tener al menos 3 sesiones por
+letra. Cuando haya 3+ sesiones, `entrenar.py` usará el split `sesion`, que es el que permite
+afirmar que el modelo funciona con personas/sesiones no vistas.
+
+### 16.7 Ejemplo completo de una jornada
+
+```powershell
+cd C:\dev\TLSM
+
+# Verificar que todo esté sano
+.\.venv\Scripts\python.exe scripts\check_entorno.py
+
+# Capturar las letras faltantes (≈15–20 min)
+.\.venv\Scripts\python.exe scripts\capturar_ui.py --firmante S01 --sesion 2026-11-21_01 `
+  --letras P,R,S,T,U,V,W,Y,Q,X,Z --rondas 3
+
+# Sumar al dataset
+.\.venv\Scripts\python.exe scripts\consolidar.py
+
+# Entrenar ambos modelos
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo estatico
+.\.venv\Scripts\python.exe scripts\entrenar.py --tipo dinamico
+
+# Revisar reports/ y probar el detector
+.\.venv\Scripts\python.exe scripts\app.py
+
+# Guardar cambios de código/documentación (datos y modelos no se versionan)
+git status
+git add -A
+git commit -m "Fase 3: captura de letras faltantes y reentrenamiento"
+git push origin main
+```
+
+### 16.8 Problemas comunes
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `No se pudo abrir la camara 0` | Otra app la usa o no hay permiso | Cierra Zoom/Teams/navegador; prueba `--camara 1` |
+| `No existe el dataset` | Falta importar o consolidar | `scripts\importar_v1.py` y/o `scripts\consolidar.py` |
+| `El split por sesión necesita al menos 3 sesiones` | Pocas sesiones | Captura más o usa `--split bloque` |
+| Una letra siempre se confunde | No está entrenada o faltan datos | Captura esa letra, consolida y reentrena |
+| El dinámico no reacciona | Movimiento por debajo del umbral o mano fuera | Haz el gesto más amplio y mantén la mano visible |
+| El texto se repite o se corta | Umbrales/cooldown | Ajusta `ConfigReconocimiento` en `config.py` |
+| `Voz no disponible` | TTS del sistema | Usa `--sin-voz` o revisa `pyttsx3` |
+| `pytest`/`ruff` no encontrados | No están en el PATH | Usa `.\.venv\Scripts\python.exe -m pytest` / `-m ruff` |
+| Los datos nuevos no aparecen | Sesión distinta o falta consolidar | Revisa `data/raw/<sesion>/` y ejecuta `consolidar.py` |
+| Git no incluye modelos/datos | Están ignorados a propósito | Se regeneran; para publicarlos usa Releases o LFS |
+
+### 16.9 Checklist rápido
+
+- [ ] `check_entorno.py` pasa y la cámara abre.
+- [ ] La captura guarda rondas en `data/raw/<sesion>/`.
+- [ ] `consolidar.py` muestra las sesiones y firmantes esperados.
+- [ ] `entrenar.py` termina y guarda los dos `.joblib`.
+- [ ] `reports/` tiene métricas y matriz de confusión revisadas.
+- [ ] `app.py` carga los modelos y reconoce las clases entrenadas.
+- [ ] La guía y el README se actualizaron si cambió el flujo.
+
+---
+
+## 17. Archivos del legado (no borrar por accidente)
 
 | Archivo | Estado | Acción |
 |---|---|---|
@@ -714,16 +1072,17 @@ git commit -m "Fase 2: nucleo v2, modelos base y UI"
 
 ---
 
-## 17. Cómo retomar el trabajo
+## 18. Cómo retomar el trabajo
 
-1. Leer secciones 2, 3 y 8.
+1. Leer secciones 2, 3 y 8; para operar, seguir el manual de la sección 16.
 2. `git status` y `pytest` para confirmar que todo sigue sano.
-3. Si se va a capturar: definir letra, sesión y firmante; usar `scripts/capturar.py`.
-4. Tras capturar: `scripts/consolidar.py` une `data/raw/<sesion>/` en `data/processed/`,
-   validando fps y etiquetas.
-5. Reentrenar con `scripts/entrenar.py` y revisar `reports/` antes de tocar la UI.
-6. Actualizar esta guía y hacer commit.
+3. Si se va a capturar: definir letras, sesión y firmante; usar `scripts/capturar_ui.py`
+   (o `scripts/capturar.py` para una sola letra).
+4. Tras capturar: `scripts/consolidar.py` suma `data/raw/<sesion>/` a `data/processed/`,
+   conserva la v1 y reemplaza solo las sesiones repetidas.
+5. Reentrenar con `scripts/entrenar.py --tipo estatico` y `--tipo dinamico`; revisar
+   `reports/` antes de tocar la UI.
+6. Probar `scripts/app.py` y actualizar esta guía; hacer commit.
 
-**Nota:** `consolidar.py` reemplaza el contenido de `data/processed/static_v2.npz` y
-`dynamic_v2.npz`. Si se quieren conservar los datos v1 junto con los nuevos, importar la v1
-dentro de una sesión de `data/raw/` o respaldar los `.npz` procesados antes de consolidar.
+**Nota:** `consolidar.py` ya **no** borra el dataset procesado. Solo `--desde-cero`
+reconstruye desde `data/raw` e ignora lo anterior; no lo uses si quieres conservar la v1.

@@ -16,10 +16,30 @@ asegurar_src()
 
 from tlsm.datasets import (  # noqa: E402
     cargar_procesado,
+    guardar_procesado,
     importar_v1_dinamico,
     importar_v1_estatico,
+    mezclar_procesado,
     resumen_etiquetas,
 )
+
+
+def _importar_y_mezclar(ruta, importar, *args, **kwargs) -> dict:
+    """Importa la v1 conservando las sesiones que no sean de la v1."""
+    previo = cargar_procesado(ruta) if ruta.exists() else None
+    importar(*args, **kwargs)
+    nuevo = cargar_procesado(ruta)
+    datos = mezclar_procesado(previo, nuevo)
+    guardar_procesado(
+        ruta,
+        datos["X"],
+        datos["y"],
+        datos["sesion"],
+        datos["firmante"],
+        raw=datos.get("raw"),
+        fps=datos.get("fps"),
+    )
+    return datos
 
 
 def main() -> int:
@@ -44,8 +64,9 @@ def main() -> int:
         print(f"No existe el CSV estatico: {args.estatico}")
         return 1
     salida_estatica = args.salida_dir / "static_v2.npz"
-    importar_v1_estatico(args.estatico, salida_estatica)
-    datos = cargar_procesado(salida_estatica)
+    datos = _importar_y_mezclar(
+        salida_estatica, importar_v1_estatico, args.estatico, salida_estatica
+    )
     print(f"Estatico: {len(datos['X'])} muestras -> {salida_estatica}")
     print(f"  features: {datos['X'].shape[1]}  clases: {resumen_etiquetas(datos['y'])}")
 
@@ -54,8 +75,9 @@ def main() -> int:
             print(f"No existe el PKL de movimiento: {args.dinamico}")
             return 1
         salida_dinamica = args.salida_dir / "dynamic_v2.npz"
-        importar_v1_dinamico(args.dinamico, salida_dinamica)
-        datos_din = cargar_procesado(salida_dinamica)
+        datos_din = _importar_y_mezclar(
+            salida_dinamica, importar_v1_dinamico, args.dinamico, salida_dinamica
+        )
         print(
             f"Dinamico: {len(datos_din['X'])} secuencias "
             f"{datos_din['X'].shape[1:]} -> {salida_dinamica}"
